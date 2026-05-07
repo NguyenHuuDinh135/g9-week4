@@ -1,0 +1,41 @@
+W4 — AI Q&A System: Retrieval → Tools → Memory  |  Deadline: Thứ Sáu 09/05/2026,,,,,,,,,,,,,,,
+Assign →,,,,,D.Khánh,Kiên,Chinh,Tấn,Đức,Long,Quyên,Định,,,
+#,Việc Cần Làm,Nhóm,Ưu Tiên,Trạng Thái,✓,✓,✓,✓,✓,✓,✓,✓,Bắt Đầu,Deadline,Ghi Chú
+NGÀY 1 — THỨ BA 06/05: KHÁM PHÁ DATA & CHUẨN BỊ,,,,,,,,,,,,,,,
+1,Đọc 36 markdown docs trong knowledge_base/,Knowledge Base,Cao,In Progress,✓,✓,✓,✓,✓,✓,✓,✓,06/05,06/05,https://docs.google.com/document/d/1E4vFopC55R8cu5FCcbhg4b6JZI_LcxfU4DfRJXLTxJI/edit?usp=sharing
+2,Chạy monitoring API local (uvicorn port 8000),Backend,Cao,Not Started,▼,▼,✓,▼,▼,▼,▼,▼,06/05,06/05,cd data_package/scripts → uv sync → uv run uvicorn
+3,"Hit tất cả API endpoints, ghi lại data CHỈ từ API",Backend,Cao,Not Started,▼,▼,✓,▼,▼,▼,▼,▼,06/05,06/05,"/services, /status, /metrics, /incidents. NotificationSvc degraded!"
+4,Chạy seed_data.py → load CSV vào SQLite,Database,Cao,Not Started,▼,▼,✓,▼,▼,▼,▼,▼,06/05,06/05,uv run python seed_data.py --db-type sqlite → verify 36 rows
+5,"Query thử DB: PaymentGW Q1=$16500, SLA targets",Database,Cao,Not Started,▼,▼,▼,▼,✓,✓,✓,✓,06/05,06/05,"T3=$7500, NotificationSvc latency target=2000ms"
+6,Sketch kiến trúc hệ thống → cả nhóm đồng ý,Architecture,Cao,Not Started,✓,✓,✓,✓,✓,✓,✓,✓,06/05,06/05,"S3→KB→LLM, tools→DB/API, memory. Thống nhất trước khi code"
+7,Tạo S3 bucket + upload 36 markdown files,Cloud / S3,Cao,Not Started,▼,▼,✓,▼,▼,✓,▼,▼,06/05,06/05,geekbrain-kb-{nhom}. Chuẩn bị cho thứ Năm tạo Bedrock KB
+NGÀY 2 — THỨ NĂM 08/05: BUILD L1 → L2 → L3,,,,,,,,,,,,,,,
+8,Tạo Bedrock Knowledge Base trỏ vào S3,AI / RAG,Cao,Not Started,▼,▼,✓,▼,▼,▼,✓,▼,08/05,08/05,"Titan Embeddings v2, OpenSearch Serverless. Sync + verify"
+9,Test Retrieve API — verify chunks đúng,AI / RAG,Cao,Not Started,✓,▼,✓,▼,▼,✓,▼,▼,08/05,08/05,"""Team Platform lead"" → team_platform.md → Alex Chen"
+10,Viết system prompt L1 + kết nối Claude Bedrock,AI / Prompt,Cao,Not Started,▼,▼,▼,✓,▼,✓,▼,▼,08/05,08/05,"""Answer using only provided context. Cite source document."""
+11,✅ L1 CHECKPOINT: 3 câu test đúng + citation,AI / RAG,Cao,Not Started,✓,▼,✓,▼,▼,▼,▼,✓,08/05,08/05,Alex Chen ✓ | Deploy freeze ✓ | Auth ✓ → MỤC TIÊU 12:00
+12,L2: Tăng retrieval K lên 8-10 chunks,AI / RAG,Cao,Not Started,▼,▼,▼,✓,▼,▼,▼,✓,08/05,08/05,Multi-doc coverage + conflict resolution
+13,L2: Cải thiện prompt xử lý conflict,AI / Prompt,Cao,Not Started,▼,✓,▼,✓,▼,▼,▼,▼,08/05,08/05,"""Check dates, versions, prefer recent, explain conflict"""
+14,"✅ L2 CHECKPOINT: Rate limit→1000, ack v1=500",AI / RAG,Cao,Not Started,▼,✓,✓,✓,▼,▼,▼,✓,08/05,08/05,"Multi-doc: ""Deploy Friday night?"" → MỤC TIÊU 15:00"
+15,L3: Viết tool query_database(sql),Backend / Tools,Cao,Not Started,▼,✓,▼,▼,▼,▼,▼,▼,08/05,08/05,"SQL → SQLite → return rows. Costs, incidents, SLA"
+16,L3: Viết tool get_service_metrics(service),Backend / Tools,Cao,Not Started,▼,▼,✓,▼,▼,▼,▼,▼,08/05,08/05,"GET /metrics/{svc} → JSON. Latency, error rate"
+17,L3: Viết 5 tools còn lại,Backend / Tools,Trung bình,Not Started,▼,✓,✓,✓,▼,▼,▼,▼,08/05,09/05,"Status, List, Incidents, Team Info, Compare"
+18,L3: Register tools + viết descriptions,AI / Tools,Cao,Not Started,▼,✓,▼,▼,▼,▼,▼,✓,08/05,08/05,CURRENT→metrics | HISTORICAL→DB. Description rõ ràng!
+19,L3: Tool call loop (LLM→parse→exec→feed back),Backend / Tools,Cao,Not Started,▼,▼,✓,▼,▼,▼,✓,▼,08/05,08/05,tool_use → chạy function → kết quả gửi lại LLM
+20,"✅ L3 CHECKPOINT: Q1=$16,500 từ DB thật",AI / Tools,Cao,Not Started,✓,▼,▼,▼,▼,▼,▼,▼,08/05,08/05,p99~185ms ✓ | SLA miss ✓ | MỤC TIÊU 17:00
+NGÀY 3 — THỨ SÁU 09/05: HOÀN THIỆN + EVIDENCE + PRESENT,,,,,,,,,,,,,,,
+21,"Test end-to-end L1, L2, L3",QA / Testing,Cao,Not Started,▼,▼,▼,▼,✓,▼,▼,▼,09/05,09/05,Nhiều câu hỏi. Fix bugs. MỤC TIÊU 10:00
+22,L4: Implement memory (buffer/window 5 turns),AI / Memory,Trung bình,Not Started,▼,✓,▼,▼,▼,▼,▼,▼,09/05,09/05,"Resolve ""its"", ""that service"" qua conversation"
+23,L4 test: hội thoại 3-4 turn pronoun resolution,AI / Memory,Trung bình,Not Started,▼,▼,✓,▼,▼,▼,▼,▼,09/05,09/05,"T1: highest cost → T2: ""why spike?"" → T3: ""which team?"""
+24,Chụp screenshots Evidence Pack (1-2/level),Documentation,Cao,Not Started,▼,▼,▼,▼,✓,▼,▼,▼,06/05,09/05,L3 tool call log QUAN TRỌNG NHẤT. Chụp KHI BUILD!
+25,Evidence Pack: S1 Cover,Documentation,Trung bình,Not Started,▼,▼,▼,▼,▼,✓,▼,▼,09/05,09/05,"Nhóm, TV, LLM, framework, link repo"
+26,Evidence Pack: S2 Architecture Overview,Documentation,Cao,Not Started,▼,▼,▼,▼,▼,▼,✓,✓,09/05,09/05,"System diagram, components, data flow, screenshot"
+27,Evidence Pack: S3 Decision Log (3 quyết định),Documentation,Trung bình,Not Started,✓,▼,✓,▼,▼,▼,▼,✓,09/05,09/05,≥1 thất bại + cách khắc phục
+28,Evidence Pack: S4 Per-Level Evidence,Documentation,Cao,Not Started,▼,✓,▼,▼,▼,▼,▼,▼,09/05,09/05,Screenshots + logs. L3 tool call = bằng chứng quan trọng nhất
+29,Evidence Pack: S5 Reflection,Documentation,Thấp,Not Started,▼,✓,✓,▼,▼,▼,▼,▼,09/05,09/05,Level khó nhất + làm gì khác nếu thêm 1 ngày
+30,Commit Evidence Pack + post link Slack,Documentation,Cao,Not Started,▼,✓,▼,▼,▼,▼,▼,▼,09/05,09/05,docs/W4_evidence.md. Không link = cap điểm ở 3
+31,Chuẩn bị slides từ Evidence Pack,Presentation,Cao,Not Started,▼,▼,▼,▼,▼,✓,✓,▼,09/05,09/05,Arch 3p + QnA 3p + Live Demo 4-5p + Lessons 1p
+BONUS — CHỈ LÀM KHI L1-L3 ỔN ĐỊNH (+1.0đ tối đa),,,,,,,,,,,,,,,
+33,Bonus A: Observability Dashboard (+0.5đ),Frontend,Thấp,Not Started,▼,▼,▼,▼,▼,▼,▼,▼,09/05,09/05,"UI: retrieval, tool calls, LLM decisions real-time"
+34,Bonus B: Agent Reasoning (+0.5đ),AI / Agent,Thấp,Not Started,▼,▼,▼,▼,▼,▼,▼,▼,09/05,09/05,Multi-step investigation structured output
+35,Bonus C: KB Sync (+0.5đ),Cloud / DevOps,Thấp,Not Started,▼,▼,▼,▼,▼,▼,▼,▼,09/05,09/05,S3 event → Lambda → StartIngestionJob
