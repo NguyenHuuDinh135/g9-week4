@@ -1,30 +1,48 @@
 #!/usr/bin/env python3
 """Create the vector index in OpenSearch Serverless for Bedrock KB.
 
-Runs OUTSIDE of Terraform as a CI step to avoid provisioner failures.
-Retries on 403 because OpenSearch Serverless data access policies
-can take 2-5 minutes to propagate after collection creation.
+Uses opensearch-py client with SigV4 auth for reliable AOSS access.
+Retries on 403 because data access policies can take minutes to propagate.
 """
 import json
 import sys
 import time
 import boto3
-from botocore.auth import SigV4Auth
-from botocore.awsrequest import AWSRequest
-import urllib.request
-import urllib.error
+from opensearchpy import OpenSearch, RequestsHttpConnection
+from requests_aws4auth import AWS4Auth
 
 
-def create_index(endpoint, index_name, credentials, region):
-    url = f"{endpoint}/{index_name}"
+def get_client(endpoint, region):
+    session = boto3.Session()
+    credentials = session.get_credentials().get_frozen_credentials()
+    auth = AWS4Auth(
+        credentials.access_key,
+        credentials.secret_key,
+        region,
+        "aoss",
+        session_token=credentials.token,
+    )
 
-    body = json.dumps({
+    host = endpoint.replace("https://", "").replace("http://", "")
+
+    return OpenSearch(
+        hosts=[{"host": host, "port": 443}],
+        http_auth=auth,
+        use_ssl=True,
+        verify_certs=True,
+        connection_class=RequestsHttpConnection,
+        timeout=30,
+    )
+
+
+def create_index(client, index_name):
+    body = {
         "settings": {
             "index": {
                 "number_of_shards": 2,
                 "number_of_replicas": 0,
                 "knn": True,
-                "knn.algo_param.ef_search": 512
+                "knn.algo_param.ef_search": 512,
             }
         },
         "mappings": {
@@ -35,40 +53,17 @@ def create_index(endpoint, index_name, credentials, region):
                     "method": {
                         "engine": "faiss",
                         "name": "hnsw",
-                        "parameters": {
-                            "m": 16,
-                            "ef_construction": 512
-                        },
-                        "space_type": "l2"
-                    }
+                        "parameters": {"m": 16, "ef_construction": 512},
+                        "space_type": "l2",
+                    },
                 },
-                "AMAZON_BEDROCK_TEXT_CHUNK": {
-                    "type": "text"
-                },
-                "AMAZON_BEDROCK_METADATA": {
-                    "type": "text"
-                }
+                "AMAZON_BEDROCK_TEXT_CHUNK": {"type": "text"},
+                "AMAZON_BEDROCK_METADATA": {"type": "text"},
             }
-        }
-    })
+        },
+    }
 
-    request = AWSRequest(
-        method="PUT",
-        url=url,
-        data=body,
-        headers={"Content-Type": "application/json"}
-    )
-    SigV4Auth(credentials, "aoss", region).add_auth(request)
-
-    req = urllib.request.Request(
-        url=url,
-        data=body.encode(),
-        headers=dict(request.headers),
-        method="PUT"
-    )
-
-    with urllib.request.urlopen(req) as response:
-        return response.read().decode()
+    client.indices.create(index=index_name, body=body)
 
 
 def main():
@@ -78,33 +73,41 @@ def main():
 
     endpoint = sys.argv[1]
     index_name = "bedrock-knowledge-base-default-index"
+    region = boto3.Session().region_name or "us-east-1"
 
     session = boto3.Session()
-    credentials = session.get_credentials().get_frozen_credentials()
-    region = session.region_name or "us-east-1"
+    sts = session.client("sts")
+    identity = sts.get_caller_identity()
+    print(f"Running as: {identity['Arn']}")
 
     max_attempts = 10
     wait_seconds = 30
 
     for attempt in range(1, max_attempts + 1):
         try:
-            result = create_index(endpoint, index_name, credentials, region)
-            print(f"Index created successfully: {result}")
-            return
-        except urllib.error.HTTPError as e:
-            error_body = e.read().decode()
-            if "resource_already_exists_exception" in error_body:
+            client = get_client(endpoint, region)
+
+            if client.indices.exists(index=index_name):
                 print("Index already exists — skipping.")
                 return
-            if e.code == 403 and attempt < max_attempts:
+
+            create_index(client, index_name)
+            print("Index created successfully.")
+            return
+
+        except Exception as e:
+            error_str = str(e)
+            if "resource_already_exists_exception" in error_str:
+                print("Index already exists — skipping.")
+                return
+            if ("403" in error_str or "Forbidden" in error_str) and attempt < max_attempts:
                 print(f"[{attempt}/{max_attempts}] 403 — data access policy not yet active. Waiting {wait_seconds}s...")
                 time.sleep(wait_seconds)
-                credentials = session.get_credentials().get_frozen_credentials()
                 continue
-            print(f"FATAL: HTTP {e.code}: {error_body}", file=sys.stderr)
+            print(f"FATAL (attempt {attempt}): {error_str}", file=sys.stderr)
             sys.exit(1)
 
-    print(f"Exhausted {max_attempts} attempts over {max_attempts * wait_seconds}s. Access policy never propagated.", file=sys.stderr)
+    print(f"Exhausted {max_attempts} attempts. Access policy never propagated.", file=sys.stderr)
     sys.exit(1)
 
 

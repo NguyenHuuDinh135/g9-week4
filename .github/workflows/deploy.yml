@@ -40,7 +40,7 @@ jobs:
           terraform_wrapper: false
 
       - name: Install Python deps for index creation
-        run: pip install boto3
+        run: pip install boto3 opensearch-py requests-aws4auth
 
       # --- Phase 1: Terraform (ECR + infra, NO KB/Lambda yet) ---
       - name: Terraform Init
@@ -64,7 +64,10 @@ jobs:
             -target=aws_cloudfront_origin_access_identity.frontend \
             -target=aws_s3_bucket_policy.frontend \
             -target=aws_cloudfront_distribution.frontend \
-            -target=aws_opensearchserverless_collection.kb
+            -target=aws_opensearchserverless_collection.kb \
+            -target=aws_opensearchserverless_access_policy.kb_data \
+            -target=aws_opensearchserverless_security_policy.kb_encryption \
+            -target=aws_opensearchserverless_security_policy.kb_network
 
       - name: Get ECR URLs and OpenSearch Endpoint
         id: infra
@@ -75,6 +78,9 @@ jobs:
           echo "opensearch_endpoint=$(terraform output -raw opensearch_collection_endpoint)" >> $GITHUB_OUTPUT
 
       # --- Phase 2: Create OpenSearch Index (outside Terraform) ---
+      - name: Wait for access policy propagation
+        run: echo "Waiting 120s for OpenSearch access policy to propagate..." && sleep 120
+
       - name: Create OpenSearch Vector Index
         working-directory: geekbrain-ai/infra
         run: python3 scripts/create_index.py ${{ steps.infra.outputs.opensearch_endpoint }}
