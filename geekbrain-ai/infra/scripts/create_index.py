@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Create the vector index in OpenSearch Serverless for Bedrock KB."""
+"""Create the vector index in OpenSearch Serverless for Bedrock KB.
+
+Runs OUTSIDE of Terraform as a CI step to avoid provisioner failures.
+Retries on 403 because OpenSearch Serverless data access policies
+can take 2-5 minutes to propagate after collection creation.
+"""
 import json
 import sys
 import time
@@ -78,27 +83,28 @@ def main():
     credentials = session.get_credentials().get_frozen_credentials()
     region = session.region_name or "us-east-1"
 
-    max_attempts = 6
-    backoff = 30
+    max_attempts = 10
+    wait_seconds = 30
 
     for attempt in range(1, max_attempts + 1):
         try:
             result = create_index(endpoint, index_name, credentials, region)
-            print(f"Index created: {result}")
+            print(f"Index created successfully: {result}")
             return
         except urllib.error.HTTPError as e:
             error_body = e.read().decode()
             if "resource_already_exists_exception" in error_body:
-                print("Index already exists, skipping.")
+                print("Index already exists — skipping.")
                 return
             if e.code == 403 and attempt < max_attempts:
-                print(f"Attempt {attempt}/{max_attempts}: 403 Forbidden (access policy propagating). Retrying in {backoff}s...")
-                time.sleep(backoff)
+                print(f"[{attempt}/{max_attempts}] 403 — data access policy not yet active. Waiting {wait_seconds}s...")
+                time.sleep(wait_seconds)
+                credentials = session.get_credentials().get_frozen_credentials()
                 continue
-            print(f"Error {e.code}: {error_body}", file=sys.stderr)
+            print(f"FATAL: HTTP {e.code}: {error_body}", file=sys.stderr)
             sys.exit(1)
 
-    print("All retry attempts exhausted.", file=sys.stderr)
+    print(f"Exhausted {max_attempts} attempts over {max_attempts * wait_seconds}s. Access policy never propagated.", file=sys.stderr)
     sys.exit(1)
 
 

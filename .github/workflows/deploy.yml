@@ -39,15 +39,21 @@ jobs:
           terraform_version: "1.9"
           terraform_wrapper: false
 
-      - name: Install Python deps for Terraform provisioners
+      - name: Install Python deps for index creation
         run: pip install boto3
 
-      # --- Phase 1: Terraform (ECR + infra, no Lambda yet) ---
+      # --- Phase 1: Terraform (ECR + infra, NO KB/Lambda yet) ---
       - name: Terraform Init
         working-directory: geekbrain-ai/infra
         run: terraform init
 
-      - name: Terraform Apply - ECR and Infra
+      - name: Remove obsolete resources from state
+        working-directory: geekbrain-ai/infra
+        run: |
+          terraform state rm time_sleep.wait_for_opensearch 2>/dev/null || true
+          terraform state rm null_resource.create_opensearch_index 2>/dev/null || true
+
+      - name: Terraform Apply - Base Infra
         working-directory: geekbrain-ai/infra
         run: |
           terraform apply -auto-approve \
@@ -58,24 +64,28 @@ jobs:
             -target=aws_cloudfront_origin_access_identity.frontend \
             -target=aws_s3_bucket_policy.frontend \
             -target=aws_cloudfront_distribution.frontend \
-            -target=aws_opensearchserverless_collection.kb \
-            -target=aws_bedrockagent_knowledge_base.main \
-            -target=aws_bedrockagent_data_source.s3
+            -target=aws_opensearchserverless_collection.kb
 
-      - name: Get ECR URLs
-        id: ecr
+      - name: Get ECR URLs and OpenSearch Endpoint
+        id: infra
         working-directory: geekbrain-ai/infra
         run: |
           echo "api_url=$(terraform output -raw ecr_api_url)" >> $GITHUB_OUTPUT
           echo "monitoring_url=$(terraform output -raw ecr_monitoring_url)" >> $GITHUB_OUTPUT
+          echo "opensearch_endpoint=$(terraform output -raw opensearch_collection_endpoint)" >> $GITHUB_OUTPUT
 
-      # --- Phase 2: Build & Push Container Images ---
+      # --- Phase 2: Create OpenSearch Index (outside Terraform) ---
+      - name: Create OpenSearch Vector Index
+        working-directory: geekbrain-ai/infra
+        run: python3 scripts/create_index.py ${{ steps.infra.outputs.opensearch_endpoint }}
+
+      # --- Phase 3: Build & Push Container Images ---
       - name: Build Monitoring API Image
         working-directory: geekbrain-ai/data_package/scripts
-        run: docker build -t ${{ steps.ecr.outputs.monitoring_url }}:latest .
+        run: docker build -t ${{ steps.infra.outputs.monitoring_url }}:latest .
 
       - name: Push Monitoring API Image
-        run: docker push ${{ steps.ecr.outputs.monitoring_url }}:latest
+        run: docker push ${{ steps.infra.outputs.monitoring_url }}:latest
 
       - name: Prepare API Build Context
         working-directory: geekbrain-ai/apps/api
@@ -83,12 +93,12 @@ jobs:
 
       - name: Build API Image
         working-directory: geekbrain-ai/apps/api
-        run: docker build -t ${{ steps.ecr.outputs.api_url }}:latest .
+        run: docker build -t ${{ steps.infra.outputs.api_url }}:latest .
 
       - name: Push API Image
-        run: docker push ${{ steps.ecr.outputs.api_url }}:latest
+        run: docker push ${{ steps.infra.outputs.api_url }}:latest
 
-      # --- Phase 3: Terraform Apply Full (Lambda can now find images) ---
+      # --- Phase 4: Terraform Apply Full (KB + Lambda + API GW) ---
       - name: Terraform Apply - Full
         working-directory: geekbrain-ai/infra
         run: terraform apply -auto-approve
@@ -103,7 +113,7 @@ jobs:
           echo "cloudfront_id=$(terraform output -raw cloudfront_distribution_id)" >> $GITHUB_OUTPUT
           echo "api_url=$(terraform output -raw api_url)" >> $GITHUB_OUTPUT
 
-      # --- Frontend (standalone to S3 + CloudFront) ---
+      # --- Frontend (S3 + CloudFront) ---
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
