@@ -1,6 +1,6 @@
 resource "time_sleep" "wait_for_opensearch" {
   depends_on      = [aws_opensearchserverless_collection.kb]
-  create_duration = "60s"
+  create_duration = "120s"
 }
 
 resource "null_resource" "create_opensearch_index" {

@@ -2,6 +2,7 @@
 """Create the vector index in OpenSearch Serverless for Bedrock KB."""
 import json
 import sys
+import time
 import boto3
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
@@ -9,18 +10,7 @@ import urllib.request
 import urllib.error
 
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: create_index.py <collection_endpoint>", file=sys.stderr)
-        sys.exit(1)
-
-    endpoint = sys.argv[1]  # e.g. https://xxx.us-east-1.aoss.amazonaws.com
-    index_name = "bedrock-knowledge-base-default-index"
-
-    session = boto3.Session()
-    credentials = session.get_credentials().get_frozen_credentials()
-    region = session.region_name or "us-east-1"
-
+def create_index(endpoint, index_name, credentials, region):
     url = f"{endpoint}/{index_name}"
 
     body = json.dumps({
@@ -72,16 +62,44 @@ def main():
         method="PUT"
     )
 
-    try:
-        with urllib.request.urlopen(req) as response:
-            print(f"Index created: {response.read().decode()}")
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode()
-        if "resource_already_exists_exception" in error_body:
-            print("Index already exists, skipping.")
-        else:
+    with urllib.request.urlopen(req) as response:
+        return response.read().decode()
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: create_index.py <collection_endpoint>", file=sys.stderr)
+        sys.exit(1)
+
+    endpoint = sys.argv[1]
+    index_name = "bedrock-knowledge-base-default-index"
+
+    session = boto3.Session()
+    credentials = session.get_credentials().get_frozen_credentials()
+    region = session.region_name or "us-east-1"
+
+    max_attempts = 6
+    backoff = 30
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            result = create_index(endpoint, index_name, credentials, region)
+            print(f"Index created: {result}")
+            return
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode()
+            if "resource_already_exists_exception" in error_body:
+                print("Index already exists, skipping.")
+                return
+            if e.code == 403 and attempt < max_attempts:
+                print(f"Attempt {attempt}/{max_attempts}: 403 Forbidden (access policy propagating). Retrying in {backoff}s...")
+                time.sleep(backoff)
+                continue
             print(f"Error {e.code}: {error_body}", file=sys.stderr)
             sys.exit(1)
+
+    print("All retry attempts exhausted.", file=sys.stderr)
+    sys.exit(1)
 
 
 if __name__ == "__main__":
