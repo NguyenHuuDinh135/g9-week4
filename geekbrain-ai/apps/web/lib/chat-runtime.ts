@@ -5,6 +5,10 @@ import { useLocalRuntime } from "@assistant-ui/react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
+const THREAD_ID = typeof crypto !== "undefined"
+  ? crypto.randomUUID()
+  : Math.random().toString(36).slice(2);
+
 const chatModelAdapter: ChatModelAdapter = {
   async *run({ messages, abortSignal }) {
     const response = await fetch(`${API_BASE}/api/chat`, {
@@ -19,6 +23,7 @@ const chatModelAdapter: ChatModelAdapter = {
               .map((p) => p.text)
               .join("") || "",
         })),
+        thread_id: THREAD_ID,
       }),
       signal: abortSignal,
     });
@@ -48,15 +53,26 @@ const chatModelAdapter: ChatModelAdapter = {
             if (data.type === "trace") {
               const step = data.step === "kb_retrieval"
                 ? `📚 KB Retrieval: ${data.data.results_count} docs found (${data.data.sources?.map((s: { source: string; score: number }) => s.source.split("/").pop()).join(", ") || "none"})`
-                : `🔧 Tool: ${data.data.tool}(${JSON.stringify(data.data.input).slice(0, 80)}...)`;
+                : `🔧 Tool: ${data.data.tool}(${JSON.stringify(data.data.input).slice(0, 80)})`;
               traceText += step + "\n";
-              yield { content: [{ type: "text" as const, text: `\`\`\`trace\n${traceText}\`\`\`\n\n⏳ Processing...` }] };
+              yield {
+                content: [
+                  { type: "reasoning" as const, text: traceText },
+                  { type: "text" as const, text: "⏳ Processing..." },
+                ],
+              };
             } else if (data.type === "text") {
               fullText = data.content;
-              const display = traceText
-                ? `<details><summary>🔍 Pipeline Trace</summary>\n\n\`\`\`\n${traceText}\`\`\`\n</details>\n\n${fullText}`
-                : fullText;
-              yield { content: [{ type: "text" as const, text: display }] };
+              if (traceText) {
+                yield {
+                  content: [
+                    { type: "reasoning" as const, text: traceText },
+                    { type: "text" as const, text: fullText },
+                  ],
+                };
+              } else {
+                yield { content: [{ type: "text" as const, text: fullText }] };
+              }
             }
           } catch {
             // skip malformed SSE lines

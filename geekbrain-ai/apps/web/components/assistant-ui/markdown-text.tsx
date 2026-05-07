@@ -9,11 +9,21 @@ import {
   useIsMarkdownCodeBlock,
 } from "@assistant-ui/react-markdown";
 import remarkGfm from "remark-gfm";
-import { type FC, memo, useState } from "react";
+import { type FC, type ReactNode, memo, useState, Children } from "react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import { renderWithCitations } from "@/components/assistant-ui/citation";
 import { cn } from "@workspace/ui/lib/utils";
+
+function processCitations(children: ReactNode): ReactNode {
+  return Children.map(children, (child) => {
+    if (typeof child === "string" && /\[KB\]|\[DB\]|\[API\]/.test(child)) {
+      return <>{renderWithCitations(child)}</>;
+    }
+    return child;
+  });
+}
 
 const MarkdownTextImpl = () => {
   return (
@@ -121,14 +131,16 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  p: ({ className, ...props }) => (
+  p: ({ className, children, ...props }) => (
     <p
       className={cn(
         "aui-md-p my-2.5 leading-normal first:mt-0 last:mb-0",
         className,
       )}
       {...props}
-    />
+    >
+      {processCitations(children)}
+    </p>
   ),
   a: ({ className, ...props }) => (
     <a
@@ -190,14 +202,16 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  td: ({ className, ...props }) => (
+  td: ({ className, children, ...props }) => (
     <td
       className={cn(
         "aui-md-td border-muted-foreground/20 border-s border-b px-2 py-1 text-start last:border-e [[align=center]]:text-center [[align=right]]:text-end",
         className,
       )}
       {...props}
-    />
+    >
+      {processCitations(children)}
+    </td>
   ),
   tr: ({ className, ...props }) => (
     <tr
@@ -208,8 +222,10 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  li: ({ className, ...props }) => (
-    <li className={cn("aui-md-li leading-normal", className)} {...props} />
+  li: ({ className, children, ...props }) => (
+    <li className={cn("aui-md-li leading-normal", className)} {...props}>
+      {processCitations(children)}
+    </li>
   ),
   sup: ({ className, ...props }) => (
     <sup
