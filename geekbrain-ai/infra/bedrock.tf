@@ -3,12 +3,20 @@ resource "time_sleep" "wait_for_opensearch" {
   create_duration = "60s"
 }
 
+resource "null_resource" "create_opensearch_index" {
+  depends_on = [time_sleep.wait_for_opensearch]
+
+  provisioner "local-exec" {
+    command = "python3 ${path.module}/scripts/create_index.py ${aws_opensearchserverless_collection.kb.collection_endpoint}"
+  }
+}
+
 resource "aws_bedrockagent_knowledge_base" "main" {
   name     = "${var.project_name}-kb"
   role_arn = aws_iam_role.bedrock_kb.arn
 
   depends_on = [
-    time_sleep.wait_for_opensearch,
+    null_resource.create_opensearch_index,
     aws_iam_role_policy.bedrock_kb_opensearch
   ]
 

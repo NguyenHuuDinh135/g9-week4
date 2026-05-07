@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/time"
       version = "~> 0.12"
     }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.2"
+    }
   }
 }
 

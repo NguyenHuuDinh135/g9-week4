@@ -39,6 +39,9 @@ jobs:
           terraform_version: "1.9"
           terraform_wrapper: false
 
+      - name: Install Python deps for Terraform provisioners
+        run: pip install boto3
+
       # --- Phase 1: Terraform (ECR + infra, no Lambda yet) ---
       - name: Terraform Init
         working-directory: geekbrain-ai/infra

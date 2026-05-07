@@ -7,7 +7,7 @@ variable "region" {
 variable "project_name" {
   description = "Project name used for resource naming"
   type        = string
-  default     = "geekbrain-ai-w4"
+  default     = "dinh-geekbrain-ai-w4"
 }
 
 variable "embedding_model_id" {
