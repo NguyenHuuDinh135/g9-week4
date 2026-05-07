@@ -84,8 +84,10 @@ def _get_agent(thread_id: str | None) -> Agent:
 
 async def _stream_response(agent: Agent, user_message: str) -> AsyncGenerator[dict, None]:
     try:
-        response = agent.answer(user_message)
-        yield {"data": json.dumps({"type": "text", "content": response})}
+        result = agent.answer(user_message)
+        for step in result.get("trace", []):
+            yield {"data": json.dumps({"type": "trace", **step})}
+        yield {"data": json.dumps({"type": "text", "content": result["response"]})}
     except Exception as e:
         yield {"data": json.dumps({"type": "error", "content": str(e)})}
     yield {"data": json.dumps({"type": "done"})}
@@ -96,8 +98,8 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-        allow_credentials=True,
+        allow_origins=["*"],
+        allow_credentials=False,
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
     )

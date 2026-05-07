@@ -71,7 +71,7 @@ resource "aws_lambda_function" "api" {
     variables = {
       BEDROCK_KB_ID      = aws_bedrockagent_knowledge_base.main.id
       AWS_REGION_NAME    = var.region
-      BEDROCK_MODEL_ID   = "anthropic.claude-sonnet-4-20250514"
+      BEDROCK_MODEL_ID   = "anthropic.claude-3-sonnet-20240229-v1:0"
       DATABASE_PATH      = "/var/task/geekbrain.db"
       MONITORING_API_URL = "${aws_apigatewayv2_stage.monitoring.invoke_url}"
     }

@@ -32,8 +32,13 @@ def main():
             continue
 
         try:
-            response = agent.answer(query)
-            print(f"\nAssistant: {response}\n")
+            result = agent.answer(query)
+            if result.get("trace"):
+                print("\n--- Trace ---")
+                for step in result["trace"]:
+                    print(f"  [{step['step']}] {step['data']}")
+                print("--- End Trace ---")
+            print(f"\nAssistant: {result['response']}\n")
         except Exception as e:
             print(f"\nError: {e}\n")
 

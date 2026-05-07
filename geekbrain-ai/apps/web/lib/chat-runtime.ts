@@ -3,9 +3,11 @@
 import type { ChatModelAdapter } from "@assistant-ui/react";
 import { useLocalRuntime } from "@assistant-ui/react";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+
 const chatModelAdapter: ChatModelAdapter = {
   async *run({ messages, abortSignal }) {
-    const response = await fetch("/api/chat", {
+    const response = await fetch(`${API_BASE}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -30,6 +32,7 @@ const chatModelAdapter: ChatModelAdapter = {
 
     const decoder = new TextDecoder();
     let fullText = "";
+    let traceText = "";
 
     while (true) {
       const { done, value } = await reader.read();
@@ -42,9 +45,18 @@ const chatModelAdapter: ChatModelAdapter = {
         if (line.startsWith("data:")) {
           try {
             const data = JSON.parse(line.slice(5).trim());
-            if (data.type === "text") {
+            if (data.type === "trace") {
+              const step = data.step === "kb_retrieval"
+                ? `📚 KB Retrieval: ${data.data.results_count} docs found (${data.data.sources?.map((s: { source: string; score: number }) => s.source.split("/").pop()).join(", ") || "none"})`
+                : `🔧 Tool: ${data.data.tool}(${JSON.stringify(data.data.input).slice(0, 80)}...)`;
+              traceText += step + "\n";
+              yield { content: [{ type: "text" as const, text: `\`\`\`trace\n${traceText}\`\`\`\n\n⏳ Processing...` }] };
+            } else if (data.type === "text") {
               fullText = data.content;
-              yield { content: [{ type: "text" as const, text: fullText }] };
+              const display = traceText
+                ? `<details><summary>🔍 Pipeline Trace</summary>\n\n\`\`\`\n${traceText}\`\`\`\n</details>\n\n${fullText}`
+                : fullText;
+              yield { content: [{ type: "text" as const, text: display }] };
             }
           } catch {
             // skip malformed SSE lines
@@ -56,5 +68,25 @@ const chatModelAdapter: ChatModelAdapter = {
 };
 
 export function useChatRuntime() {
-  return useLocalRuntime(chatModelAdapter);
+  return useLocalRuntime(chatModelAdapter, {
+    adapters: {
+      suggestion: {
+        generate: async () => [
+          { prompt: "[L1] What is the current API rate limit for PaymentGW?" },
+          { prompt: "[L1] Who leads Team Platform and what services do they own?" },
+          { prompt: "[L1] What was the root cause of the March 5, 2026 PaymentGW outage?" },
+          { prompt: "[L2] What is PaymentGW's API rate limit?" },
+          { prompt: "[L2] If Team Commerce discovers a P1 bug in OrderSvc at 21:00 on a Friday, can they deploy a fix?" },
+          { prompt: "[L2] Which services would be directly affected if AuthSvc goes completely down?" },
+          { prompt: "[L3] What is PaymentGW's current p99 latency?" },
+          { prompt: "[L3] What was GeekBrain's total infrastructure cost across all services in Q1 2026?" },
+          { prompt: "[L3] Is NotificationSvc currently meeting its SLA targets?" },
+          { prompt: "[L3] Which service currently handles the most requests per minute?" },
+          { prompt: "[L4] Which service had the highest cost in March 2026?" },
+          { prompt: "[L5] Assess whether PaymentGW is reliable and recommend improvements." },
+          { prompt: "[L5] Which service is most at risk of SLA breach right now? What should be done?" },
+        ],
+      },
+    },
+  });
 }

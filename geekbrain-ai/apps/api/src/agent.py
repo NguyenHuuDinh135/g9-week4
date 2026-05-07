@@ -74,26 +74,39 @@ class Agent:
         self.memory = ConversationMemory()
         self.client = boto3.client("bedrock-runtime", region_name=AWS_REGION)
 
-    def answer(self, user_query: str) -> str:
+    def answer(self, user_query: str) -> dict:
         """Process a user question through the full RAG + Tools pipeline."""
-        kb_context = self._retrieve_context(user_query)
+        trace = []
 
-        response = self._call_with_tools(user_query, kb_context)
+        kb_results = self._retrieve_context_with_trace(user_query)
+        trace.append({
+            "step": "kb_retrieval",
+            "data": {
+                "query": user_query,
+                "results_count": len(kb_results),
+                "sources": [
+                    {"source": r.get("source", "unknown"), "score": round(r.get("score", 0), 3)}
+                    for r in kb_results[:3]
+                ],
+            },
+        })
+
+        kb_context = format_context(kb_results)
+        response = self._call_with_tools(user_query, kb_context, trace)
 
         self.memory.add_turn("user", user_query)
         self.memory.add_turn("assistant", response)
 
-        return response
+        return {"response": response, "trace": trace}
 
-    def _retrieve_context(self, query: str) -> str:
+    def _retrieve_context_with_trace(self, query: str) -> list:
         """Retrieve relevant documents from Bedrock KB."""
         try:
-            results = retrieve_from_kb(query)
-            return format_context(results)
+            return retrieve_from_kb(query)
         except Exception as e:
-            return f"[KB retrieval failed: {e}]"
+            return []
 
-    def _call_with_tools(self, user_query: str, kb_context: str) -> str:
+    def _call_with_tools(self, user_query: str, kb_context: str, trace: list) -> str:
         """Call Claude with tool use capability, handling tool calls iteratively."""
         messages = []
 
@@ -128,6 +141,14 @@ class Agent:
                 if "toolUse" in block:
                     tool_use = block["toolUse"]
                     result = self._execute_tool(tool_use["name"], tool_use["input"])
+                    trace.append({
+                        "step": "tool_call",
+                        "data": {
+                            "tool": tool_use["name"],
+                            "input": tool_use["input"],
+                            "output_preview": str(result)[:200],
+                        },
+                    })
                     tool_results.append(
                         {
                             "toolResult": {
