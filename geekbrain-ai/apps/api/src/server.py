@@ -85,6 +85,8 @@ def _get_agent(thread_id: str | None) -> Agent:
 async def _stream_response(agent: Agent, user_message: str) -> AsyncGenerator[dict, None]:
     try:
         result = agent.answer(user_message)
+        if result.get("reasoning"):
+            yield {"data": json.dumps({"type": "reasoning", "content": result["reasoning"]})}
         for step in result.get("trace", []):
             yield {"data": json.dumps({"type": "trace", **step})}
         yield {"data": json.dumps({"type": "text", "content": result["response"]})}

@@ -77,6 +77,7 @@ class Agent:
     def answer(self, user_query: str) -> dict:
         """Process a user question through the full RAG + Tools pipeline."""
         trace = []
+        reasoning = f"Analyzing question: \"{user_query}\"\nDeciding data sources needed..."
 
         kb_results = self._retrieve_context_with_trace(user_query)
         trace.append({
@@ -91,13 +92,24 @@ class Agent:
             },
         })
 
+        if kb_results:
+            reasoning += f"\n✓ Found {len(kb_results)} relevant documents from Knowledge Base."
+        else:
+            reasoning += "\n✗ No relevant documents found in Knowledge Base."
+
         kb_context = format_context(kb_results)
         response = self._call_with_tools(user_query, kb_context, trace)
+
+        tool_calls = [t for t in trace if t["step"] == "tool_call"]
+        if tool_calls:
+            tools_used = ", ".join(t["data"]["tool"] for t in tool_calls)
+            reasoning += f"\n✓ Called tools: {tools_used}"
+        reasoning += "\n✓ Generating final answer with citations."
 
         self.memory.add_turn("user", user_query)
         self.memory.add_turn("assistant", response)
 
-        return {"response": response, "trace": trace}
+        return {"response": response, "trace": trace, "reasoning": reasoning}
 
     def _retrieve_context_with_trace(self, query: str) -> list:
         """Retrieve relevant documents from Bedrock KB."""
