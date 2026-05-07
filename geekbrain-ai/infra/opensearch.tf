@@ -62,7 +62,8 @@ resource "aws_opensearchserverless_access_policy" "kb_data" {
       ]
       Principal = [
         aws_iam_role.bedrock_kb.arn,
-        data.aws_caller_identity.current.arn
+        data.aws_caller_identity.current.arn,
+        "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/geekbrain-ai-w4-github-deploy"
       ]
     }
   ])

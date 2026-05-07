@@ -1,6 +1,16 @@
+resource "time_sleep" "wait_for_opensearch" {
+  depends_on      = [aws_opensearchserverless_collection.kb]
+  create_duration = "60s"
+}
+
 resource "aws_bedrockagent_knowledge_base" "main" {
   name     = "${var.project_name}-kb"
   role_arn = aws_iam_role.bedrock_kb.arn
+
+  depends_on = [
+    time_sleep.wait_for_opensearch,
+    aws_iam_role_policy.bedrock_kb_opensearch
+  ]
 
   knowledge_base_configuration {
     type = "VECTOR"
